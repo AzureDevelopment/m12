@@ -1,0 +1,142 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "workflows_m12l3_activate_name": {
+            "defaultValue": "m12l3-activate",
+            "type": "String"
+        },
+        "connections_azuretables_externalid": {
+            "defaultValue": "/subscriptions/279f98e7-bb11-40fb-92c5-237db9a32fb4/resourceGroups/development-in-az/providers/Microsoft.Web/connections/azuretables",
+            "type": "String"
+        }
+    },
+    "variables": {},
+    "resources": [
+        {
+            "type": "Microsoft.Logic/workflows",
+            "apiVersion": "2017-07-01",
+            "name": "[parameters('workflows_m12l3_activate_name')]",
+            "location": "northeurope",
+            "properties": {
+                "state": "Enabled",
+                "definition": {
+                    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+                    "contentVersion": "1.0.0.0",
+                    "parameters": {
+                        "$connections": {
+                            "defaultValue": {},
+                            "type": "Object"
+                        }
+                    },
+                    "triggers": {
+                        "Recurrence": {
+                            "recurrence": {
+                                "frequency": "Second",
+                                "interval": 30
+                            },
+                            "type": "Recurrence"
+                        }
+                    },
+                    "actions": {
+                        "For_each_2": {
+                            "foreach": "@body('Get_entities')?['value']",
+                            "actions": {
+                                "Get_entity": {
+                                    "runAfter": {},
+                                    "type": "ApiConnection",
+                                    "inputs": {
+                                        "host": {
+                                            "connection": {
+                                                "name": "@parameters('$connections')['azuretables']['connectionId']"
+                                            }
+                                        },
+                                        "method": "get",
+                                        "path": "/Tables/@{encodeURIComponent('test')}/entities(PartitionKey='@{encodeURIComponent(items('For_each_2')?['PartitionKey'])}',RowKey='@{encodeURIComponent(items('For_each_2')?['RowKey'])}')"
+                                    }
+                                },
+                                "HTTP": {
+                                    "runAfter": {
+                                        "Parse_JSON": [
+                                            "Succeeded"
+                                        ]
+                                    },
+                                    "type": "Http",
+                                    "inputs": {
+                                        "method": "GET",
+                                        "uri": "@body('Parse_JSON')?['webhook']"
+                                    }
+                                },
+                                "Parse_JSON": {
+                                    "runAfter": {
+                                        "Get_entity": [
+                                            "Succeeded"
+                                        ]
+                                    },
+                                    "type": "ParseJson",
+                                    "inputs": {
+                                        "content": "@body('Get_entity')",
+                                        "schema": {
+                                            "properties": {
+                                                "PartitionKey": {
+                                                    "type": "string"
+                                                },
+                                                "RowKey": {
+                                                    "type": "string"
+                                                },
+                                                "Timestamp": {
+                                                    "type": "string"
+                                                },
+                                                "odata.etag": {
+                                                    "type": "string"
+                                                },
+                                                "odata.metadata": {
+                                                    "type": "string"
+                                                },
+                                                "webhook": {
+                                                    "type": "string"
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    }
+                                }
+                            },
+                            "runAfter": {
+                                "Get_entities": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "Foreach"
+                        },
+                        "Get_entities": {
+                            "runAfter": {},
+                            "type": "ApiConnection",
+                            "inputs": {
+                                "host": {
+                                    "connection": {
+                                        "name": "@parameters('$connections')['azuretables']['connectionId']"
+                                    }
+                                },
+                                "method": "get",
+                                "path": "/Tables/@{encodeURIComponent('test')}/entities"
+                            }
+                        }
+                    },
+                    "outputs": {}
+                },
+                "parameters": {
+                    "$connections": {
+                        "value": {
+                            "azuretables": {
+                                "connectionId": "[parameters('connections_azuretables_externalid')]",
+                                "connectionName": "azuretables",
+                                "id": "/subscriptions/279f98e7-bb11-40fb-92c5-237db9a32fb4/providers/Microsoft.Web/locations/northeurope/managedApis/azuretables"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    ]
+}
